@@ -1,6 +1,12 @@
 import pigpio
 import time
 
+try:
+    import numpy as np
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    _NUMPY_AVAILABLE = False
+
 class ST7789V_Driver:
     """
     ST7789Vディスプレイを制御する純粋なドライバークラス。(横型デフォルト版)
@@ -62,14 +68,19 @@ class ST7789V_Driver:
         if self.spi_handle < 0:
             raise RuntimeError(f"SPIバスのオープンに失敗しました。エラーコード: {self.spi_handle}")
 
+        self._buffer = None  # ダブルバッファリング用のバッファ
         self._init_display()
         self.set_rotation(self._rotation)
 
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+    def _init_buffer(self):
+        """現在の画面サイズに基づいてバッファを初期化する"""
+        self._buffer = bytearray(self.width * self.height * 2)
 
     def _write_command(self, command):
         self.pi.write(self.dc_pin, 0)
@@ -151,6 +162,7 @@ class ST7789V_Driver:
         else:
             raise ValueError("Rotation must be 0, 90, 180, or 270.")
         self._rotation = rotation
+        self._init_buffer()
             
     def set_window(self, x0, y0, x1, y1):
         self._write_command(self.CMD_CASET)
@@ -166,6 +178,40 @@ class ST7789V_Driver:
             chunk = pixel_bytes[i:i + chunk_size]
             self.pi.spi_write(self.spi_handle, chunk)
 
+    def display(self, image):
+        """
+        PIL Imageオブジェクトを画面に表示する。
+        内部バッファに変換してから一括でSPI転送する（ダブルバッファリング）。
+        numpyが利用可能な場合は、高速な変換を行う。
+        """
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        if image.size != (self.width, self.height):
+            image = image.resize((self.width, self.height))
+
+        if _NUMPY_AVAILABLE:
+            # numpy を使った高速な変換
+            np_img = np.array(image, dtype=np.uint8)
+            r = (np_img[:, :, 0] >> 3).astype(np.uint16)
+            g = (np_img[:, :, 1] >> 2).astype(np.uint16)
+            b = (np_img[:, :, 2] >> 3).astype(np.uint16)
+            rgb565 = (r << 11) | (g << 5) | b
+            self._buffer = rgb565.byteswap().tobytes()
+        else:
+            # PIL のみを使った変換 (低速)
+            pixel_data = []
+            w, h = image.size
+            for y in range(h):
+                for x in range(w):
+                    r, g, b = image.getpixel((x, y))
+                    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+                    pixel_data.append(rgb565 >> 8)
+                    pixel_data.append(rgb565 & 0xFF)
+            self._buffer = bytearray(pixel_data)
+
+        self.set_window(0, 0, self.width - 1, self.height - 1)
+        self.write_pixels(self._buffer)
+
     def close(self):
         try:
             self.pi.write(self.backlight_pin, 0)
@@ -177,13 +223,19 @@ class ST7789V_Driver:
 
 # --- 使用例 ---
 if __name__ == '__main__':
+    from PIL import Image
     print("ST7789V ドライバテスト開始")
     try:
+        # SPI速度を安定していた40MHzに戻してテスト
         with ST7789V_Driver(speed_hz=40000000) as lcd:
-            print("初期化成功。画面を青色で塗りつぶします...")
-            pixel_data = bytearray([0x00, 0x1F] * (lcd.width * lcd.height))
-            lcd.set_window(0, 0, lcd.width - 1, lcd.height - 1)
-            lcd.write_pixels(pixel_data)
+            print("初期化成功。新しいdisplay()メソッドで画面を青色で塗りつぶします...")
+            
+            # 青一色のPIL Imageオブジェクトを作成
+            img = Image.new("RGB", (lcd.width, lcd.height), "blue")
+            
+            # 新しいdisplayメソッドで描画
+            lcd.display(img)
+            
             time.sleep(3)
             print("テスト完了")
     except Exception as e:

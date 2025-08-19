@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2.3.2",
     "pigpio>=1.78",
     "pillow>=11.3.0",
     "spidev>=3.7",

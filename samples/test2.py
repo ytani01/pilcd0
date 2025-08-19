@@ -4,26 +4,23 @@ import random
 
 from st7789v_driver import ST7789V_Driver
 
-def pil_to_rgb565_bytes(img):
-    """PIL.Image → RGB565のバイト列に変換"""
-    pixel_data = []
-    w, h = img.size
-    for y in range(h):
-        for x in range(w):
-            r, g, b = img.getpixel((x, y))
-            rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-            pixel_data.append(rgb565 >> 8)
-            pixel_data.append(rgb565 & 0xFF)
-    return bytearray(pixel_data)
-
 def main():
     with ST7789V_Driver(speed_hz=40000000) as lcd:
         print("アニメーション開始... Ctrl+C で終了してください。")
+        try:
+            import numpy
+            print("numpyを検出しました。高速な描画が可能です。")
+        except ImportError:
+            print("警告: numpyがインストールされていません。描画が低速になります。")
+            print("`pip install numpy` でパフォーマンスが向上します。")
 
         # ボールの初期位置と速度
         ball_x, ball_y = 50, 50
-        dx, dy = 3, 2
+        dx, dy = 4, 3 # 速度を少し上げる
         ball_radius = 20
+        
+        last_time = time.time()
+        frame_count = 0
 
         while True:
             # フレーム画像作成
@@ -52,18 +49,20 @@ def main():
             if ball_y - ball_radius < 0 or ball_y + ball_radius >= lcd.height:
                 dy = -dy
 
-            # PIL → RGB565 バイト列変換
-            pixel_bytes = pil_to_rgb565_bytes(img)
-
-            # LCDに送信
-            lcd.set_window(0, 0, lcd.width - 1, lcd.height - 1)
-            lcd.write_pixels(pixel_bytes)
-
-            # 少し待つ（fps調整）
-            time.sleep(0.03)
+            # PIL ImageをLCDに送信
+            lcd.display(img)
+            
+            frame_count += 1
+            current_time = time.time()
+            elapsed = current_time - last_time
+            if elapsed >= 1.0:
+                fps = frame_count / elapsed
+                print(f"FPS: {fps:.2f}")
+                frame_count = 0
+                last_time = current_time
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("終了しました。")
+        print("\n終了しました。")
