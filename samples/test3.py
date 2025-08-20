@@ -42,7 +42,7 @@ from st7789v_driver import ST7789V_Driver
 class CONFIG:
     """アニメーションの挙動を調整するための設定値"""
     # ディスプレイ設定
-    SPI_SPEED_HZ = 40000000  # SPIクロック周波数
+    SPI_SPEED_HZ = 16000000  # SPIクロック周波数
 
     # パフォーマンス設定
     TARGET_FPS = 30.0  # 目標フレームレート
@@ -60,7 +60,7 @@ class CONFIG:
     FPS_FONT_PATH = "Firge-Regular.ttf"
     FPS_FONT_SIZE = 50
     FPS_TEXT_COLOR = (255, 255, 255)
-    FPS_UPDATE_INTERVAL = 0.25  # FPS表示の更新間隔 (秒)
+    FPS_UPDATE_INTERVAL = 0.2  # FPS表示の更新間隔 (秒)
     FPS_AREA_PADDING = 5      # FPS表示領域の余白
 
 # --- ヘルパー関数 ---
@@ -166,7 +166,7 @@ class FpsCounter:
         # 文字欠けを防ぐため、textbboxのオフセットを考慮した固定描画領域を計算
         padding = CONFIG.FPS_AREA_PADDING
         pos = (padding, padding)
-        base_bbox = ImageDraw.Draw(bg_img).textbbox((0,0), "FPS: 99.9", font=self.font)
+        base_bbox = ImageDraw.Draw(bg_img).textbbox((0,0), "FPS: 999", font=self.font)
         box_width = base_bbox[2] - base_bbox[0] + (padding * 2)
         box_height = base_bbox[3] - base_bbox[1] + (padding * 2)
         
@@ -185,7 +185,7 @@ class FpsCounter:
 
         if elapsed >= CONFIG.FPS_UPDATE_INTERVAL:
             fps = self.frame_count / elapsed
-            fps_text = f"FPS: {fps:.1f}"
+            fps_text = f"FPS: {fps:.0f}"
             
             # 描画処理
             text_img = self.bg_crop.copy()
